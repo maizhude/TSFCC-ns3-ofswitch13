@@ -425,6 +425,28 @@ OFSwitch13Controller::HandlePacketIn (
 }
 
 ofl_err
+OFSwitch13Controller::HandleQueCn (
+  struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
+
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
+
+ofl_err
+OFSwitch13Controller::HandleQueCr (
+  struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
+
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
+
+ofl_err
 OFSwitch13Controller::HandleError (
   struct ofl_msg_error *msg, Ptr<const RemoteSwitch> swtch,
   uint32_t xid)
@@ -580,7 +602,12 @@ OFSwitch13Controller::HandleSwitchMsg (
     case OFPT_QUEUE_GET_CONFIG_REPLY:
       return HandleQueueGetConfigReply (
         (struct ofl_msg_queue_get_config_reply*)msg, swtch, xid);
-
+    case OFPT_QUE_CN:
+      return HandleQueCn (
+        (struct ofl_msg_que_cn_cr*)msg, swtch, xid);
+    case OFPT_QUE_CR:
+      return HandleQueCr (
+        (struct ofl_msg_que_cn_cr*)msg, swtch, xid);
     case OFPT_EXPERIMENTER:
     default:
       return ofl_error (OFPET_BAD_REQUEST, OFPGMFC_BAD_TYPE);

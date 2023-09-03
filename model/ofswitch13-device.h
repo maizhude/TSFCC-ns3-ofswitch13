@@ -222,6 +222,8 @@ public:
    */
   Ptr<OFSwitch13Port> GetSwitchPort (uint32_t no) const;
 
+  size_t GetSwitchPortSize (void) const;
+
   /**
    * Called when a packet is received on one of the switch's ports. This method
    * will schedule the packet for OpenFlow pipeline.

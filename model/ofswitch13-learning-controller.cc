@@ -97,6 +97,8 @@ OFSwitch13LearningController::HandlePacketIn (
 
       // Get L2Table for this datapath
       auto it = m_learnedInfo.find (swDpId);
+      // std::string flowTable = "stats-flow table=0";
+      // DpctlExecute (swDpId, flowTable);
       if (it != m_learnedInfo.end ())
         {
           L2Table_t *l2Table = &it->second;
@@ -139,6 +141,13 @@ OFSwitch13LearningController::HandlePacketIn (
                       << ",prio=" << ++prio << " eth_dst=" << src48
                       << " apply:output=" << inPort;
                   DpctlExecute (swDpId, cmd.str ());
+                  std::ostringstream setRwnd;
+                  uint16_t rwnd = 32760;
+                  uint32_t output = 1;
+                  setRwnd << "flow-mod cmd=add,table=0,prio=220 eth_type=0x800,"
+                          << "ip_proto=6,ip_src=10.0.0.2,ip_dst=10.0.0.1,"
+                          << "tcp_src=5000 apply:set_rwnd="<< rwnd <<",output="<< output;
+                  DpctlExecute (swDpId, setRwnd.str());
                 }
             }
           else
@@ -176,6 +185,7 @@ OFSwitch13LearningController::HandlePacketIn (
 
       reply.actions_num = 1;
       reply.actions = (struct ofl_action_header**)&a;
+
 
       SendToSwitch (swtch, (struct ofl_msg_header*)&reply, xid);
       free (a);

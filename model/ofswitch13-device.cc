@@ -446,6 +446,12 @@ OFSwitch13Device::GetSwitchPort (uint32_t no) const
   return m_ports.at (no - 1);
 }
 
+size_t
+OFSwitch13Device::GetSwitchPortSize(void) const
+{
+  return m_ports.size();
+}
+
 void
 OFSwitch13Device::ReceiveFromSwitchPort (Ptr<Packet> packet, uint32_t portNo,
                                          uint64_t tunnelId)
