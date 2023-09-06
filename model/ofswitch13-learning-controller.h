@@ -55,6 +55,14 @@ public:
     struct ofl_msg_packet_in *msg, Ptr<const RemoteSwitch> swtch,
     uint32_t xid);
 
+  ofl_err HandleQueCn (
+    struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+    uint32_t xid);
+
+  ofl_err HandleQueCr (
+    struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+    uint32_t xid);
+
   /**
    * Handle flow removed messages sent from switch to this controller. Look for
    * L2 switching information and removes associated entry.

@@ -56,7 +56,27 @@ OFSwitch13LearningController::DoDispose ()
   m_learnedInfo.clear ();
   OFSwitch13Controller::DoDispose ();
 }
+ofl_err
+OFSwitch13LearningController::HandleQueCn (
+  struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
 
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
+
+ofl_err
+OFSwitch13LearningController::HandleQueCr (
+  struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
+
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
 ofl_err
 OFSwitch13LearningController::HandlePacketIn (
   struct ofl_msg_packet_in *msg, Ptr<const RemoteSwitch> swtch,

@@ -452,6 +452,16 @@ OFSwitch13Device::GetSwitchPortSize(void) const
   return m_ports.size();
 }
 
+Ptr<OFSwitch13Device::RemoteController>
+OFSwitch13Device::GetFirstRemoteController (void) const
+{
+  NS_LOG_FUNCTION (this);
+
+  auto it = m_controllers.begin ();
+  Ptr<RemoteController> remoteCtrl = *it;
+  return remoteCtrl;
+}
+
 void
 OFSwitch13Device::ReceiveFromSwitchPort (Ptr<Packet> packet, uint32_t portNo,
                                          uint64_t tunnelId)
@@ -919,6 +929,23 @@ OFSwitch13Device::SendPacketInMessage (struct packet *pkt, uint8_t tableId,
   // Increase packet-in counter and send the message.
   m_cPacketIn++;
   return dp_send_message (pkt->dp, (struct ofl_msg_header *)&msg, 0);
+}
+
+int
+OFSwitch13Device::SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength)
+{
+  NS_LOG_FUNCTION (this << queueLength);
+  Ptr<OFSwitch13Device> openFlowDev = GetDevice(dpid);
+  Ptr<RemoteController> remoteCtrl = openFlowDev->GetFirstRemoteController();
+  // Create the packet_in message.
+  struct ofl_msg_que_cn_cr msg;
+  msg.header.type = OFPT_QUE_CN;
+  msg.queue_length = queueLength;
+  // struct sender senderCtrl;
+  // senderCtrl.remote = remoteCtrl->m_remote;
+  // senderCtrl.conn_id = 0; // TODO No support for auxiliary connections.
+  // senderCtrl.xid = 0;
+  return dp_send_message (m_datapath, (struct ofl_msg_header *)&msg, 0);
 }
 
 bool

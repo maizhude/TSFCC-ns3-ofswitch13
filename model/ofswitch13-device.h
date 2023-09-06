@@ -224,6 +224,10 @@ public:
 
   size_t GetSwitchPortSize (void) const;
 
+  Ptr<OFSwitch13Device::RemoteController> 
+  GetFirstRemoteController (void) const;
+
+  int SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength);
   /**
    * Called when a packet is received on one of the switch's ports. This method
    * will schedule the packet for OpenFlow pipeline.
