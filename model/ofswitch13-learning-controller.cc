@@ -19,7 +19,12 @@
 #ifdef NS3_OFSWITCH13
 
 #include "ofswitch13-learning-controller.h"
-
+#define TCP_FIN 0x01
+#define TCP_SYN 0x02
+#define TCP_RST 0x04
+#define TCP_PSH 0x08
+#define TCP_ACK 0x10
+#define TCP_URG 0x20
 NS_LOG_COMPONENT_DEFINE ("OFSwitch13LearningController");
 
 namespace ns3 {
@@ -114,6 +119,55 @@ OFSwitch13LearningController::HandlePacketIn (
       struct ofl_match_tlv *ethDst =
         oxm_match_lookup (OXM_OF_ETH_DST, (struct ofl_match*)msg->match);
       dst48.CopyFrom (ethDst->value);
+
+      uint16_t isTCP;
+      struct ofl_match_tlv *ip_proto =
+        oxm_match_lookup (OXM_OF_IP_PROTO, (struct ofl_match*)msg->match);
+      if(ip_proto != NULL){
+        memcpy(&isTCP, ip_proto->value, OXM_LENGTH(OXM_OF_IP_PROTO));
+        if(isTCP == 6){
+          Ipv4Address ipv4_src;
+          struct ofl_match_tlv *ipv4Src =
+            oxm_match_lookup (OXM_OF_IPV4_SRC, (struct ofl_match*)msg->match);
+          memcpy(&ipv4_src, ipv4Src->value, OXM_LENGTH(OXM_OF_IPV4_SRC));
+
+          Ipv4Address ipv4_dst;
+          struct ofl_match_tlv *ipv4Dst =
+            oxm_match_lookup (OXM_OF_IPV4_DST, (struct ofl_match*)msg->match);
+          memcpy(&ipv4_dst, ipv4Dst->value, OXM_LENGTH(OXM_OF_IPV4_DST));
+
+          struct ofl_match_tlv* tlv;
+          uint16_t srcPort;
+          uint16_t dstPort;
+          tlv = oxm_match_lookup(OXM_OF_TCP_SRC, (struct ofl_match*)msg->match);
+          memcpy(&srcPort, tlv->value, OXM_LENGTH(OXM_OF_TCP_SRC));
+          tlv = oxm_match_lookup(OXM_OF_TCP_DST, (struct ofl_match*)msg->match);
+          memcpy(&dstPort, tlv->value, OXM_LENGTH(OXM_OF_TCP_DST));
+          int tcpFlags;
+          tlv = oxm_match_lookup(OXM_OF_TCP_FLAGS, (struct ofl_match*)msg->match);
+          memcpy(&tcpFlags, tlv->value, OXM_LENGTH(OXM_OF_TCP_FLAGS));
+          if (tcpFlags & TCP_FIN) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_FIN");
+          }
+          if (tcpFlags & TCP_SYN) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_SYN");
+          }
+          if (tcpFlags & TCP_RST) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_RST");
+          }
+          if (tcpFlags & TCP_PSH) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_PSH");
+          }
+          if (tcpFlags & TCP_ACK) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_ACK");
+          }
+          if (tcpFlags & TCP_URG) {
+              NS_LOG_DEBUG ("TCP FLAG IS: TCP_URG");
+          }
+          NS_LOG_DEBUG ("-----------------------");
+
+        }
+      }
 
       // Get L2Table for this datapath
       auto it = m_learnedInfo.find (swDpId);
@@ -267,7 +321,9 @@ OFSwitch13LearningController::HandshakeSuccessful (
   // to the controller.
   DpctlExecute (swDpId, "flow-mod cmd=add,table=0,prio=0 "
                 "apply:output=ctrl:128");
-
+  DpctlExecute (swDpId, "flow-mod cmd=add,table=0,prio=300 eth_type=0x800,ip_proto=6,tcp_flags=2 apply:output=ctrl:128");
+  std::string flowTable = "stats-flow table=0";
+  DpctlExecute (swDpId, flowTable);
   // Configure te switch to buffer packets and send only the first 128 bytes of
   // each packet sent to the controller when not using an output action to the
   // OFPP_CONTROLLER logical port.
