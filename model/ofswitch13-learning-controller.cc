@@ -101,7 +101,7 @@ OFSwitch13LearningController::HandlePacketIn (
   NS_LOG_DEBUG ("Packet in match: " << msgStr);
   free (msgStr);
 
-  if (reason == OFPR_NO_MATCH)
+  if (reason == OFPR_NO_MATCH || reason == OFPR_ACTION)
     {
       // Let's get necessary information (input port and mac address)
       uint32_t inPort;
@@ -125,6 +125,7 @@ OFSwitch13LearningController::HandlePacketIn (
         oxm_match_lookup (OXM_OF_IP_PROTO, (struct ofl_match*)msg->match);
       if(ip_proto != NULL){
         memcpy(&isTCP, ip_proto->value, OXM_LENGTH(OXM_OF_IP_PROTO));
+        NS_LOG_DEBUG ("-----------------------");
         if(isTCP == 6){
           Ipv4Address ipv4_src;
           struct ofl_match_tlv *ipv4Src =
@@ -146,6 +147,7 @@ OFSwitch13LearningController::HandlePacketIn (
           int tcpFlags;
           tlv = oxm_match_lookup(OXM_OF_TCP_FLAGS, (struct ofl_match*)msg->match);
           memcpy(&tcpFlags, tlv->value, OXM_LENGTH(OXM_OF_TCP_FLAGS));
+          
           if (tcpFlags & TCP_FIN) {
               NS_LOG_DEBUG ("TCP FLAG IS: TCP_FIN");
           }
@@ -216,7 +218,7 @@ OFSwitch13LearningController::HandlePacketIn (
                       << " apply:output=" << inPort;
                   DpctlExecute (swDpId, cmd.str ());
                   std::ostringstream setRwnd;
-                  uint16_t rwnd = 32760;
+                  uint16_t rwnd = 128;
                   uint32_t output = 1;
                   setRwnd << "flow-mod cmd=add,table=0,prio=220 eth_type=0x800,"
                           << "ip_proto=6,ip_src=10.0.0.2,ip_dst=10.0.0.1,"
@@ -322,8 +324,9 @@ OFSwitch13LearningController::HandshakeSuccessful (
   DpctlExecute (swDpId, "flow-mod cmd=add,table=0,prio=0 "
                 "apply:output=ctrl:128");
   DpctlExecute (swDpId, "flow-mod cmd=add,table=0,prio=300 eth_type=0x800,ip_proto=6,tcp_flags=2 apply:output=ctrl:128");
-  std::string flowTable = "stats-flow table=0";
-  DpctlExecute (swDpId, flowTable);
+  DpctlExecute (swDpId, "flow-mod cmd=add,table=0,prio=300 eth_type=0x800,ip_proto=6,tcp_flags=18 apply:output=ctrl:128");
+  // std::string flowTable = "stats-flow table=0";
+  // DpctlExecute (swDpId, flowTable);
   // Configure te switch to buffer packets and send only the first 128 bytes of
   // each packet sent to the controller when not using an output action to the
   // OFPP_CONTROLLER logical port.
