@@ -82,6 +82,28 @@ public:
   uint32_t GetPortNo (void) const;
 
   /**
+   * Get the Congestion stats for this port.
+   * \return The stats.
+   */
+  uint16_t GetCongestionState (void) const;
+
+  /**
+   * Get the Congestion recover count for this port.
+   * \return The count.
+   */
+  uint16_t GetCongestionRecoverCount (void) const;
+
+  /**
+   * Set the Congestion stats for this port.
+   */
+  void SetCongestionState (uint16_t state);
+
+  /**
+   * Set the Congestion recover count for this port.
+   */
+  void SetCongestionRecoverCount (uint16_t count);
+
+  /**
    * Get the OpenFlow queue for this port.
    * \return The port queue.
    */
@@ -159,6 +181,8 @@ private:
 
   uint64_t                  m_dpId;         //!< OpenFlow datapath ID.
   uint32_t                  m_portNo;       //!< Port number.
+  uint16_t                  m_state;        //!< Congestion state.
+  uint16_t                  m_count;        //!< Congestion recover count.
   struct sw_port*           m_swPort;       //!< ofsoftswitch13 port structure.
   Ptr<NetDevice>            m_netDev;       //!< Underlying NetDevice.
   Ptr<OFSwitch13Queue>      m_portQueue;    //!< OpenFlow port Queue.

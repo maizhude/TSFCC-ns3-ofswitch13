@@ -21,7 +21,7 @@
 #ifdef NS3_OFSWITCH13
 
 #include "ofswitch13-internal-helper.h"
-#include <ns3/ofswitch13-learning-controller.h>
+#include <ns3/ofswitch13-tsfcc-controller.h>
 
 namespace ns3 {
 

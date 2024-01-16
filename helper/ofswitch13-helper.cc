@@ -56,7 +56,7 @@ OFSwitch13Helper::GetTypeId (void)
     .SetGroupName ("OFSwitch13")
     .AddAttribute ("ChannelDataRate",
                    "The data rate to be used for the OpenFlow channel.",
-                   DataRateValue (DataRate ("10Gb/s")),
+                   DataRateValue (DataRate ("100Gb/s")),
                    MakeDataRateAccessor (&OFSwitch13Helper::SetChannelDataRate),
                    MakeDataRateChecker ())
     .AddAttribute ("ChannelType",

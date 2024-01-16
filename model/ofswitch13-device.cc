@@ -932,7 +932,7 @@ OFSwitch13Device::SendPacketInMessage (struct packet *pkt, uint8_t tableId,
 }
 
 int
-OFSwitch13Device::SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength)
+OFSwitch13Device::SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength, uint32_t port_no)
 {
   NS_LOG_FUNCTION (this << queueLength);
   Ptr<OFSwitch13Device> openFlowDev = GetDevice(dpid);
@@ -941,6 +941,25 @@ OFSwitch13Device::SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queu
   struct ofl_msg_que_cn_cr msg;
   msg.header.type = OFPT_QUE_CN;
   msg.queue_length = queueLength;
+  msg.port_no = port_no;
+  // struct sender senderCtrl;
+  // senderCtrl.remote = remoteCtrl->m_remote;
+  // senderCtrl.conn_id = 0; // TODO No support for auxiliary connections.
+  // senderCtrl.xid = 0;
+  return dp_send_message (m_datapath, (struct ofl_msg_header *)&msg, 0);
+}
+
+int
+OFSwitch13Device::SendQueueCongestionRecoverMessage (uint64_t dpid, uint16_t queueLength, uint32_t port_no)
+{
+  NS_LOG_FUNCTION (this << queueLength);
+  Ptr<OFSwitch13Device> openFlowDev = GetDevice(dpid);
+  Ptr<RemoteController> remoteCtrl = openFlowDev->GetFirstRemoteController();
+  // Create the packet_in message.
+  struct ofl_msg_que_cn_cr msg;
+  msg.header.type = OFPT_QUE_CR;
+  msg.queue_length = queueLength;
+  msg.port_no = port_no;
   // struct sender senderCtrl;
   // senderCtrl.remote = remoteCtrl->m_remote;
   // senderCtrl.conn_id = 0; // TODO No support for auxiliary connections.

@@ -49,6 +49,8 @@ GetDefaultQueueFactory ()
 OFSwitch13Port::OFSwitch13Port ()
   : m_dpId (0),
   m_portNo (0),
+  m_state (0),
+  m_count (0),
   m_swPort (0),
   m_netDev (0),
   m_openflowDev (0)
@@ -113,6 +115,8 @@ OFSwitch13Port::OFSwitch13Port (struct datapath *dp, Ptr<NetDevice> netDev,
                                 Ptr<OFSwitch13Device> openflowDev)
   : m_dpId (0),
   m_portNo (0),
+  m_state (0),
+  m_count (0),
   m_swPort (0),
   m_netDev (netDev),
   m_openflowDev (openflowDev)
@@ -217,6 +221,30 @@ uint32_t
 OFSwitch13Port::GetPortNo (void) const
 {
   return m_portNo;
+}
+
+uint16_t
+OFSwitch13Port::GetCongestionState (void) const
+{
+  return m_state;
+}
+
+uint16_t
+OFSwitch13Port::GetCongestionRecoverCount (void) const
+{
+  return m_count;
+}
+
+void
+OFSwitch13Port::SetCongestionState (uint16_t state) 
+{
+  m_state = state;
+}
+
+void
+OFSwitch13Port::SetCongestionRecoverCount (uint16_t count) 
+{
+  m_count = count;
 }
 
 Ptr<OFSwitch13Queue>

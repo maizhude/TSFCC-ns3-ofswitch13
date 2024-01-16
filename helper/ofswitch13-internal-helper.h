@@ -28,7 +28,7 @@ namespace ns3 {
 class Node;
 class AttributeValue;
 class OFSwitch13Controller;
-class OFSwitch13LearningController;
+class OFSwitch13TsfccController;
 
 /**
  * \ingroup ofswitch13
@@ -65,7 +65,7 @@ public:
    */
   Ptr<OFSwitch13Controller> InstallController (
     Ptr<Node> cNode, Ptr<OFSwitch13Controller> controller =
-      CreateObject<OFSwitch13LearningController> ());
+      CreateObject<OFSwitch13TsfccController> ());
 
 protected:
   /** Destructor implementation. */

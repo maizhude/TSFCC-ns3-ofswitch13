@@ -227,7 +227,9 @@ public:
   Ptr<OFSwitch13Device::RemoteController> 
   GetFirstRemoteController (void) const;
 
-  int SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength);
+  int SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queueLength, uint32_t port_no);
+
+  int SendQueueCongestionRecoverMessage (uint64_t dpid, uint16_t queueLength, uint32_t port_no);
   /**
    * Called when a packet is received on one of the switch's ports. This method
    * will schedule the packet for OpenFlow pipeline.

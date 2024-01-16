@@ -43,7 +43,7 @@ namespace ns3 {
 class Node;
 class AttributeValue;
 class OFSwitch13Controller;
-class OFSwitch13LearningController;
+class OFSwitch13TsfccController;
 
 /**
  * \ingroup ofswitch13
