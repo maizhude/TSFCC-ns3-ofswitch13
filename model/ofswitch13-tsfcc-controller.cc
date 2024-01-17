@@ -61,11 +61,12 @@ OFSwitch13TsfccController::PredictIncast(){
           uint16_t elephant_num = 0;
           ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
           if(flow_num != 0 && flow_num >= IncastThreshold){
-            double fair_window = ((bandwith * rtt/1000000)/8 + 50 * 1500)/flow_num;
-            uint16_t rwnd =std::max(int(fair_window/4), int(max_size/2));
-            NS_LOG_WARN("Switch ID: " << dpId << ", flow_num: " << flow_num);
+            double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
+            uint16_t rwnd =std::max(int(fair_window/4), int(max_size/4));
+            NS_LOG_WARN("dpId: " << dpId << " rwnd: "  << rwnd);
+            UpdateMouseRWND(rwnd*4, dpId, port_no, true);
+            UpdateMouseRWND(rwnd, dpId, port_no, false);
             UpdateElephantRWND(rwnd, dpId, port_no);
-            UpdateMouseRWND(rwnd, dpId, port_no);
           }
         }
         portData.second = 0;
@@ -114,32 +115,57 @@ void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
   ack_key.dst_port = flow.src_port;
   //找到流第一跳交换机的输入端口，作为反向ack流的最后一跳输出端口，
   //利用流表找到这条流的相反方向流，修改rwnd
-  auto flow_it = m_globalFlowTable.find (ack_key);
-  if (flow_it != m_globalFlowTable.end ()){
-    uint64_t out_dpid = flow.switches.front().first;
-    uint32_t out_port = flow.switches.front().second.in_port;
-    std::ostringstream set_rwnd;
-    set_rwnd << "flow-mod cmd=add,table=0,prio=520 eth_type=0x800,"
-            << "ip_proto=6,ip_src=" 
-            << ack_key.ipv4_src
-            << ",ip_dst=" 
-            << ack_key.ipv4_dst
-            << ","
-            << "tcp_src=" 
-            << ack_key.src_port 
-            << ",tcp_dst=" 
-            << ack_key.dst_port 
-            << " apply:set_rwnd=" 
-            << rwnd 
-            << ",output="
-            << out_port;
-    DpctlExecute (out_dpid, set_rwnd.str());
-  }
+  uint64_t out_dpid = flow.switches.front().first;
+  uint32_t out_port = flow.switches.front().second.in_port;
+  std::ostringstream set_rwnd;
+  set_rwnd << "flow-mod cmd=add,table=0,prio=720 eth_type=0x800,"
+          << "ip_proto=6,ip_src=" 
+          << ack_key.ipv4_src
+          << ",ip_dst=" 
+          << ack_key.ipv4_dst
+          << ","
+          << "tcp_src=" 
+          << ack_key.src_port 
+          << ",tcp_dst=" 
+          << ack_key.dst_port 
+          << " apply:set_rwnd=" 
+          << rwnd 
+          << ",output="
+          << out_port;
+  DpctlExecute (out_dpid, set_rwnd.str());
 }
 
+/*** Set the value of RWND ***/
+void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
+  Quadruple ack_key;
+  ack_key.ipv4_src = flow.ipv4_dst;
+  ack_key.ipv4_dst = flow.ipv4_src;
+  ack_key.src_port = flow.dst_port;
+  ack_key.dst_port = flow.src_port;
+  //找到流第一跳交换机的输入端口，作为反向ack流的最后一跳输出端口，
+  //利用流表找到这条流的相反方向流，修改rwnd
+  uint64_t out_dpid = flow.switches.front().first;
+  uint32_t out_port = flow.switches.front().second.in_port;
+  std::ostringstream set_rwnd;
+  set_rwnd << "flow-mod cmd=add,table=0,prio=740 eth_type=0x800,"
+          << "ip_proto=6,tcp_flags=18,ip_src=" 
+          << ack_key.ipv4_src
+          << ",ip_dst=" 
+          << ack_key.ipv4_dst
+          << ","
+          << "tcp_src=" 
+          << ack_key.src_port 
+          << ",tcp_dst=" 
+          << ack_key.dst_port 
+          << " apply:set_rwnd=" 
+          << rwnd 
+          << ",output="
+          << out_port;
+  DpctlExecute (out_dpid, set_rwnd.str());
+}
 
 /*** Update the RWND value of the mouse flow ***/
-void OFSwitch13TsfccController::UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no){
+void OFSwitch13TsfccController::UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no, bool flag){
   FlowTableMap_t::iterator it;
   NS_LOG_INFO("UpdateMouseRWND");
   //遍历全局流表
@@ -153,7 +179,11 @@ void OFSwitch13TsfccController::UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId
         auto it = m_elephantFlowTable.find(key);
         //如果不在大象流表中，那么认为这条流是老鼠流，用修改老鼠流的rwnd去修改
         if (it == m_elephantFlowTable.end ()){
-          SetRwnd(flow, mou_rwnd);
+          if(flag){
+            SetSYNRwnd(flow, mou_rwnd);
+          }else{
+            SetRwnd(flow, mou_rwnd);
+          }
         }
       }
     }
@@ -203,7 +233,6 @@ OFSwitch13TsfccController::HandleQueCn (
 {
   NS_LOG_FUNCTION (this << swtch << xid);
   uint16_t elephant_num = 0;
-  uint16_t mouse_num = 0;
   uint16_t flow_num = 0;
   uint16_t ele_rwnd = 0;
   uint16_t mou_rwnd = 0;
@@ -215,7 +244,6 @@ OFSwitch13TsfccController::HandleQueCn (
   //分类大象流老鼠流，并记录各自的流数量
   ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
   
-  mouse_num = flow_num - elephant_num;
   if(flow_num != 0){
     //计算公平窗口
     double fair_window = ((bandwith * rtt)/1000000/8 + queue_length * 1500)/flow_num;
@@ -224,18 +252,19 @@ OFSwitch13TsfccController::HandleQueCn (
     //根据队列长度限制发送窗口
     if(elephant_num != 0){
       if (queue_length < queue_threshold){
-        ele_rwnd =std::max(int(fair_window/6), int(max_size/2));
+        ele_rwnd =std::max(int(fair_window/6), int(max_size/4));
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
       }else{
-        ele_rwnd = int(max_size/2);
+        double mou_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
+        ele_rwnd = int(max_size/4);
         //老鼠流rwnd设置
-        mou_rwnd = std::max(int((flow_num * fair_window - elephant_num * 2 * max_size)/mouse_num/4),int(max_size/2));
+        mou_rwnd = std::max(int(mou_window/4),int(max_size/4));
         // mou_rwnd = int(((flow_num * fair_window - elephant_num * 2 * max_size)/mouse_num));
         // mou_rwnd = std::max(int((flow_num * fair_window - elephant_num * 2 * max_size)/mouse_num/4),int(max_size/2));
         //大象流就修改为2MSS
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
         //老鼠流修改为mou_rwnd
-        UpdateMouseRWND(mou_rwnd, dpId, port_no);
+        UpdateMouseRWND(mou_rwnd, dpId, port_no, false);
         
       }
     }
@@ -267,44 +296,9 @@ OFSwitch13TsfccController::HandleQueCr (
   if(flow_num != 0){
     //计算公平窗口
     double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
-    rwnd =std::max(int(fair_window/4), int(max_size/2));
-    UpdateAllRWND(rwnd, dpId, port_no);
+    rwnd =std::max(int(fair_window/4), int(max_size/4));
+    UpdateElephantRWND(rwnd, dpId, port_no);
   }
-
-  // FlowTableMap_t::iterator it;
-  // for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
-  //   FlowStats flow = it->second;
-  //   std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
-  //   for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
-  //     if(dpid == switch_it->first && switch_it->second.out_port == port_no){
-  //       Quadruple ack_key;
-  //       ack_key.ipv4_src = flow.ipv4_dst;
-  //       ack_key.ipv4_dst = flow.ipv4_src;
-  //       ack_key.src_port = flow.dst_port;
-  //       ack_key.dst_port = flow.src_port;
-  //       //找到流第一跳交换机的输入端口，作为反向ack流的最后一跳输出端口，
-  //       //利用流表找到这条流的相反方向流，修改rwnd
-  //       auto flow_it = m_globalFlowTable.find (ack_key);
-  //       if (flow_it != m_globalFlowTable.end ()){
-  //         uint64_t out_dpid = flow.switches.front().first;
-  //         // uint32_t out_port = flow.switches.front().second.in_port;
-  //         std::ostringstream remove_set_rwnd;
-  //         remove_set_rwnd << "flow-mod cmd=del,table=0 eth_type=0x800,"
-  //                 << "ip_proto=6,ip_src=" 
-  //                 << ack_key.ipv4_src
-  //                 << ",ip_dst=" 
-  //                 << ack_key.ipv4_dst
-  //                 << ","
-  //                 << "tcp_src=" 
-  //                 << ack_key.src_port 
-  //                 << ",tcp_dst=" 
-  //                 << ack_key.dst_port;
-  //         DpctlExecute (out_dpid, remove_set_rwnd.str());
-  //         // NS_LOG_DEBUG ("------" << out_dpid);
-  //       }
-  //     }
-  //   }
-  // }
 
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
   return 0;
@@ -405,7 +399,7 @@ void OFSwitch13TsfccController::HandleFIN(
         if(flow_num != 0 && elephant_num != 0){
           //计算公平窗口
           double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/(flow_num-1);
-          ele_rwnd =std::max(int(fair_window/4), int(max_size/2));
+          ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
           UpdateElephantRWND(ele_rwnd, dpId, port_no);
         }
       }

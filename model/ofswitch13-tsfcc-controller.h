@@ -76,7 +76,9 @@ public:
 
   void SetRwnd(FlowStats flow, uint16_t rwnd);
 
-  void UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no);
+  void SetSYNRwnd(FlowStats flow, uint16_t rwnd);
+
+  void UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no, bool flag);
 
   void UpdateElephantRWND(uint16_t ele_rwnd, uint64_t dpId, uint32_t port_no);
 
