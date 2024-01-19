@@ -118,7 +118,7 @@ void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
   uint64_t out_dpid = flow.switches.front().first;
   uint32_t out_port = flow.switches.front().second.in_port;
   std::ostringstream set_rwnd;
-  set_rwnd << "flow-mod cmd=add,table=0,prio=720 eth_type=0x800,"
+  set_rwnd << "flow-mod cmd=add,table=0,prio=720,idle=1 eth_type=0x800,"
           << "ip_proto=6,ip_src=" 
           << ack_key.ipv4_src
           << ",ip_dst=" 
@@ -147,7 +147,7 @@ void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
   uint64_t out_dpid = flow.switches.front().first;
   uint32_t out_port = flow.switches.front().second.in_port;
   std::ostringstream set_rwnd;
-  set_rwnd << "flow-mod cmd=add,table=0,prio=740 eth_type=0x800,"
+  set_rwnd << "flow-mod cmd=add,table=0,prio=740,idle=1 eth_type=0x800,"
           << "ip_proto=6,tcp_flags=18,ip_src=" 
           << ack_key.ipv4_src
           << ",ip_dst=" 
@@ -246,22 +246,19 @@ OFSwitch13TsfccController::HandleQueCn (
   
   if(flow_num != 0){
     //计算公平窗口
-    double fair_window = ((bandwith * rtt)/1000000/8 + queue_length * 1500)/flow_num;
+    double fair_window = ((bandwith * rtt)/1000000/8-3*1500)/flow_num;
     // NS_LOG_WARN ("------" << elephant_num << "----------" << flow_num << "--------" << queue_length << "-----------");
 
     //根据队列长度限制发送窗口
     if(elephant_num != 0){
       if (queue_length < queue_threshold){
-        ele_rwnd =std::max(int(fair_window/6), int(max_size/4));
+        ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
       }else{
-        double mou_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
         ele_rwnd = int(max_size/4);
         //老鼠流rwnd设置
-        mou_rwnd = std::max(int(mou_window/4),int(max_size/4));
-        // mou_rwnd = int(((flow_num * fair_window - elephant_num * 2 * max_size)/mouse_num));
-        // mou_rwnd = std::max(int((flow_num * fair_window - elephant_num * 2 * max_size)/mouse_num/4),int(max_size/2));
-        //大象流就修改为2MSS
+        mou_rwnd = std::max(int(fair_window/4),int(max_size/4));
+        //大象流就修改为1MSS
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
         //老鼠流修改为mou_rwnd
         UpdateMouseRWND(mou_rwnd, dpId, port_no, false);
@@ -295,7 +292,7 @@ OFSwitch13TsfccController::HandleQueCr (
   
   if(flow_num != 0){
     //计算公平窗口
-    double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
+    double fair_window = ((bandwith * rtt/1000000)/8+5*1500)/flow_num;
     rwnd =std::max(int(fair_window/4), int(max_size/4));
     UpdateElephantRWND(rwnd, dpId, port_no);
   }
@@ -398,7 +395,7 @@ void OFSwitch13TsfccController::HandleFIN(
 
         if(flow_num != 0 && elephant_num != 0){
           //计算公平窗口
-          double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/(flow_num-1);
+          double fair_window = ((bandwith * rtt/1000000)/8+5*1500)/(flow_num-1);
           ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
           UpdateElephantRWND(ele_rwnd, dpId, port_no);
         }

@@ -204,7 +204,7 @@ private:
   //\}
   uint16_t max_size = 1460;
   uint64_t bandwith = 1000 * 1024 * 1024;
-  uint16_t rtt = 400; //RTT为40us
+  uint16_t rtt = 650; //RTT为40us
   uint16_t queue_threshold = 80;
   uint32_t IncastThreshold = 20;
 
