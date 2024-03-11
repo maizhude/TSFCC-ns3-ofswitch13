@@ -47,7 +47,10 @@ OFSwitch13TsfccController::GetTypeId (void)
   ;
   return tid;
 }
-
+/**
+ * @brief 通过定期检测“新流量”的数量来预测Incast事件
+ * 
+ */
 void
 OFSwitch13TsfccController::PredictIncast(){
   //1.查询所有端口的新流数量，并重新设置为0
@@ -61,12 +64,12 @@ OFSwitch13TsfccController::PredictIncast(){
           uint16_t elephant_num = 0;
           ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
           if(flow_num != 0 && flow_num >= IncastThreshold){
-            double fair_window = ((bandwith * rtt/1000000)/8 + 20 * 1500)/flow_num;
+            double fair_window = (BDP)/flow_num;
             uint16_t rwnd =std::max(int(fair_window/4), int(max_size/4));
             NS_LOG_WARN("dpId: " << dpId << " rwnd: "  << rwnd);
             UpdateMouseRWND(rwnd*4, dpId, port_no, true);
             UpdateMouseRWND(rwnd, dpId, port_no, false);
-            UpdateElephantRWND(rwnd, dpId, port_no);
+            UpdateElephantRWND(int(max_size/4), dpId, port_no);
           }
         }
         portData.second = 0;
@@ -83,7 +86,15 @@ OFSwitch13TsfccController::DoDispose ()
   m_learnedInfo.clear ();
   OFSwitch13Controller::DoDispose ();
 }
-/*** Distinguish between elephant flow and mouse flow ***/
+
+/**
+ * @brief 从全局流表中识别出大象流，放入大象流表中
+ * 
+ * @param flow_num 总流的数量
+ * @param elephant_num 大象流的数量
+ * @param dpId 交换机ID
+ * @param port_no 交换机出端口
+ */
 void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *elephant_num, uint64_t dpId, uint32_t port_no){
   FlowTableMap_t::iterator it;
   for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
@@ -95,7 +106,7 @@ void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *el
         Time now = Simulator::Now();
         flow.exist_time = (now - flow.start_time).GetSeconds();
         // NS_LOG_DEBUG ("------" << flow.exist_time);
-        if(flow.exist_time > 0.5){
+        if(flow.exist_time > 0.3){
           auto eleIt = m_elephantFlowTable.find(it->first);
           if (eleIt == m_elephantFlowTable.end ()){
             m_elephantFlowTable[it->first] = it->second;
@@ -106,7 +117,13 @@ void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *el
     }
   }
 }
-/*** Set the value of RWND ***/
+
+/**
+ * @brief 找到这条流的第一跳交换机，并下发修改rwnd的流表（普通数据包）
+ * 
+ * @param flow TCP流（根据这条流找到ACK流）
+ * @param rwnd 要修改的rwnd值
+ */
 void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
   Quadruple ack_key;
   ack_key.ipv4_src = flow.ipv4_dst;
@@ -118,7 +135,7 @@ void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
   uint64_t out_dpid = flow.switches.front().first;
   uint32_t out_port = flow.switches.front().second.in_port;
   std::ostringstream set_rwnd;
-  set_rwnd << "flow-mod cmd=add,table=0,prio=720,idle=1 eth_type=0x800,"
+  set_rwnd << "flow-mod cmd=add,table=0,prio=720 eth_type=0x800,"
           << "ip_proto=6,ip_src=" 
           << ack_key.ipv4_src
           << ",ip_dst=" 
@@ -135,7 +152,12 @@ void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
   DpctlExecute (out_dpid, set_rwnd.str());
 }
 
-/*** Set the value of RWND ***/
+/**
+ * @brief 找到这条流的第一跳交换机，并下发修改rwnd的流表（SYN-ACK数据包）
+ * 
+ * @param flow TCP流（根据这条流找到ACK流）
+ * @param rwnd 要修改的rwnd值
+ */
 void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
   Quadruple ack_key;
   ack_key.ipv4_src = flow.ipv4_dst;
@@ -147,7 +169,7 @@ void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
   uint64_t out_dpid = flow.switches.front().first;
   uint32_t out_port = flow.switches.front().second.in_port;
   std::ostringstream set_rwnd;
-  set_rwnd << "flow-mod cmd=add,table=0,prio=740,idle=1 eth_type=0x800,"
+  set_rwnd << "flow-mod cmd=add,table=0,prio=840 eth_type=0x800,"
           << "ip_proto=6,tcp_flags=18,ip_src=" 
           << ack_key.ipv4_src
           << ",ip_dst=" 
@@ -164,7 +186,14 @@ void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
   DpctlExecute (out_dpid, set_rwnd.str());
 }
 
-/*** Update the RWND value of the mouse flow ***/
+/**
+ * @brief 从全局流表中找到老鼠流调用SetRwnd或者SetSYNRwnd进行rwnd的修改
+ * 
+ * @param mou_rwnd 老鼠流修改的rwnd值
+ * @param dpId 交换机ID
+ * @param port_no 交换机出端口
+ * @param flag 判断数据包是否是普通数据包（1：SYN-ACK数据包，0：普通数据包）
+ */
 void OFSwitch13TsfccController::UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no, bool flag){
   FlowTableMap_t::iterator it;
   NS_LOG_INFO("UpdateMouseRWND");
@@ -189,29 +218,42 @@ void OFSwitch13TsfccController::UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId
     }
   }
 }
-/*** Update the RWND value of the elephant flow ***/
+/**
+ * @brief 
+ * 
+ * @param ele_rwnd 从大象流表中找到大象流调用SetRwnd进行rwnd的修改
+ * @param dpId 交换机ID
+ * @param port_no 交换机出端口
+ */
 void OFSwitch13TsfccController::UpdateElephantRWND(uint16_t ele_rwnd, uint64_t dpId, uint32_t port_no){
   FlowTableMap_t::iterator it;
   NS_LOG_INFO("UpdateElephantRWND");
-  //遍历大象流表
-  for (it = m_elephantFlowTable.begin(); it != m_elephantFlowTable.end(); ++it) {
-    FlowStats flow = it->second;
-    // Quadruple key = it->first;
-    std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
-    //判断一条流所经过的交换机是否有当前拥塞的交换机
-    for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
-      if(dpId == switch_it->first && switch_it->second.out_port == port_no){
-        SetRwnd(flow, ele_rwnd);
+    //遍历大象流表
+    for (it = m_elephantFlowTable.begin(); it != m_elephantFlowTable.end(); ++it) {
+      FlowStats flow = it->second;
+      // Quadruple key = it->first;
+      std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
+      //判断一条流所经过的交换机是否有当前拥塞的交换机
+      for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
+        if(dpId == switch_it->first && switch_it->second.out_port == port_no){
+          SetRwnd(flow, ele_rwnd);
+        }
       }
     }
-  }
 }
 
-/*** Update the RWND value of the All flow ***/
+/**
+ * @brief 
+ * 
+ * @param ele_rwnd 从全局流表中找到所有流调用SetRwnd进行rwnd的修改
+ * @param dpId 交换机ID
+ * @param port_no 交换机出端口
+ */
 void OFSwitch13TsfccController::UpdateAllRWND(uint16_t rwnd, uint64_t dpId, uint32_t port_no){
   FlowTableMap_t::iterator it;
   NS_LOG_INFO("UpdateAllRWND");
-  //遍历大象流表
+  
+  //遍历所有流表
   for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
     FlowStats flow = it->second;
     // Quadruple key = it->first;
@@ -225,7 +267,14 @@ void OFSwitch13TsfccController::UpdateAllRWND(uint16_t rwnd, uint64_t dpId, uint
   }
 }
 
-/*** Handle queue congestion messages ***/
+/**
+ * @brief 用于处理队列超过阈值接收到的OpenFlow消息，流程为：先区分象鼠流，再根据队列长度判断进行哪一种拥塞控制方案
+ * 
+ * @param msg OpenFlow消息
+ * @param swtch 交换机
+ * @param xid xid
+ * @return ofl_err 错误结构体
+ */
 ofl_err
 OFSwitch13TsfccController::HandleQueCn (
   struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
@@ -246,18 +295,20 @@ OFSwitch13TsfccController::HandleQueCn (
   
   if(flow_num != 0){
     //计算公平窗口
-    double fair_window = ((bandwith * rtt)/1000000/8-3*1500)/flow_num;
+    double fair_window = (BDP + queue_length * 1500)/flow_num;
     // NS_LOG_WARN ("------" << elephant_num << "----------" << flow_num << "--------" << queue_length << "-----------");
 
     //根据队列长度限制发送窗口
-    if(elephant_num != 0){
-      if (queue_length < queue_threshold){
-        ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
+    if(elephant_num != 0 && queue_length != 0){
+      if (queue_length < queue_threshold_h){
+        double Alpha = (1-(1-double(queue_threshold_l)/queue_length)*double(flow_num)/elephant_num);
+        ele_rwnd =std::max(int(Alpha*fair_window/4), int(max_size/4));
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
       }else{
         ele_rwnd = int(max_size/4);
+
         //老鼠流rwnd设置
-        mou_rwnd = std::max(int(fair_window/4),int(max_size/4));
+        mou_rwnd = std::max(int((BDP+queue_threshold_l*1500)/flow_num/4),int(max_size/4));
         //大象流就修改为1MSS
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
         //老鼠流修改为mou_rwnd
@@ -270,7 +321,14 @@ OFSwitch13TsfccController::HandleQueCn (
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
   return 0;
 }
-/*** Handle queue congestion recovery messages ***/
+/**
+ * @brief 用于处理接收到队列长度恢复到阈值以下的OpenFlow消息，流程为：先区分象鼠流，再根据BDP等对象鼠流进行不同的rwnd值的增加
+ * 
+ * @param msg OpenFlow消息
+ * @param swtch 交换机
+ * @param xid xid
+ * @return ofl_err 错误结构体
+ */
 ofl_err
 OFSwitch13TsfccController::HandleQueCr (
   struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
@@ -282,25 +340,40 @@ OFSwitch13TsfccController::HandleQueCr (
   uint64_t dpId = swtch->GetDpId ();
 
   uint32_t port_no = msg->port_no;
-  // uint16_t queue_length = msg->queue_length;
   uint16_t elephant_num = 0;
+  uint16_t mouse_num = 0;
   
   uint16_t flow_num = 0;
-  uint16_t rwnd = 0;
+  uint16_t ele_rwnd = 0;
+  uint16_t mou_rwnd = 0;
   //分类大象流老鼠流，并记录各自的流数量
   ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
-  
+  mouse_num = flow_num - elephant_num;
   if(flow_num != 0){
     //计算公平窗口
-    double fair_window = ((bandwith * rtt/1000000)/8+5*1500)/flow_num;
-    rwnd =std::max(int(fair_window/4), int(max_size/4));
-    UpdateElephantRWND(rwnd, dpId, port_no);
+    double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_l * 1500)/flow_num;
+    ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
+    UpdateElephantRWND(ele_rwnd, dpId, port_no);
+    if(mouse_num != 0){
+      double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_h * 1500)/flow_num;
+      mou_rwnd =std::max(int(fair_window/4), int(max_size/4));
+      UpdateMouseRWND(mou_rwnd, dpId, port_no, false);
+    }
   }
-
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
   return 0;
 }
-/*** Processing TCP packets with SYN flag bit ***/
+/**
+ * @brief 用于处理经过交换机的SYN数据包，SYN数据包被认为是新流量，所以在全局流表添加新流以及预测Incast中流数量+1
+ * 
+ * @param ipv4_src 流的IP源地址
+ * @param ipv4_dst 流的IP目的地址
+ * @param src_port 流的TCP源端口
+ * @param dst_port 流的TCP目的端口
+ * @param inPort 交换机入端口
+ * @param outPort 交换机出端口
+ * @param dpid 交换机ID
+ */
 void OFSwitch13TsfccController::HandleSYN(
   Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, 
   uint16_t dst_port, uint32_t inPort, uint32_t outPort, uint64_t dpid)
@@ -368,7 +441,14 @@ void OFSwitch13TsfccController::HandleSYN(
     }
   }
 }
-/*** Processing TCP packets with FIN flag bit ***/
+/**
+  * @brief 用于处理经过交换机的FIN数据包，FIN数据包被认为是流量的结束，所以在全局流表删除新流以及删除这条流在所有交换机上的流表项
+ * 
+ * @param ipv4_src 流的IP源地址
+ * @param ipv4_dst 流的IP目的地址
+ * @param src_port 流的TCP源端口
+ * @param dst_port 流的TCP目的端口
+ */
 void OFSwitch13TsfccController::HandleFIN(
   Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, 
   uint16_t dst_port)
@@ -395,7 +475,7 @@ void OFSwitch13TsfccController::HandleFIN(
 
         if(flow_num != 0 && elephant_num != 0){
           //计算公平窗口
-          double fair_window = ((bandwith * rtt/1000000)/8+5*1500)/(flow_num-1);
+          double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_l * 1500)/(flow_num-1);
           ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
           UpdateElephantRWND(ele_rwnd, dpId, port_no);
         }
@@ -430,7 +510,14 @@ void OFSwitch13TsfccController::HandleFIN(
     m_globalFlowTable.erase(it);
   }
 }
-
+/**
+ * @brief 处理交换机TABLE_MISS的数据包
+ * 
+ * @param msg OpenFlow消息
+ * @param swtch 交换机
+ * @param xid xid
+ * @return ofl_err 错误结构体
+ */
 ofl_err
 OFSwitch13TsfccController::HandlePacketIn (
   struct ofl_msg_packet_in *msg, Ptr<const RemoteSwitch> swtch,
@@ -637,7 +724,11 @@ OFSwitch13TsfccController::HandleFlowRemoved (
   return 0;
 }
 
-/********** Private methods **********/
+/**
+ * @brief 握手成功，交换机和控制器成功连接，下发一些必要的流表
+ * 
+ * @param swtch 交换机
+ */
 void
 OFSwitch13TsfccController::HandshakeSuccessful (
   Ptr<const RemoteSwitch> swtch)
