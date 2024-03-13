@@ -295,6 +295,10 @@ protected:
     struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
     uint32_t xid);
 
+  virtual ofl_err HandleSketchData (
+    struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
+    uint32_t xid);
+
   virtual ofl_err HandleError (
     struct ofl_msg_error *msg, Ptr<const RemoteSwitch> swtch,
     uint32_t xid);

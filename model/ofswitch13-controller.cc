@@ -446,6 +446,17 @@ OFSwitch13Controller::HandleQueCr (
   return 0;
 }
 
+ofl_err 
+OFSwitch13Controller::HandleSketchData (
+    struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
+    uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
+
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
+
 ofl_err
 OFSwitch13Controller::HandleError (
   struct ofl_msg_error *msg, Ptr<const RemoteSwitch> swtch,
@@ -608,6 +619,9 @@ OFSwitch13Controller::HandleSwitchMsg (
     case OFPT_QUE_CR:
       return HandleQueCr (
         (struct ofl_msg_que_cn_cr*)msg, swtch, xid);
+    case OFPT_SKETCH_DATA:
+      return HandleSketchData(
+        (struct ofl_msg_sketch_data*)msg, swtch, xid);
     case OFPT_EXPERIMENTER:
     default:
       return ofl_error (OFPET_BAD_REQUEST, OFPGMFC_BAD_TYPE);

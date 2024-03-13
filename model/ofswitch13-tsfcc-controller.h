@@ -70,6 +70,11 @@ public:
   ofl_err HandleQueCr (
     struct ofl_msg_que_cn_cr *msg, Ptr<const RemoteSwitch> swtch,
     uint32_t xid);
+  
+  ofl_err HandleSketchData (
+  struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid);
+
   void ClassifyTraffic(uint16_t *flow_num, uint16_t *elephant_num, uint64_t dpId, uint32_t port_no);
 
   void PredictIncast();

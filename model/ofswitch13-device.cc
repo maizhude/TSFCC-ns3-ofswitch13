@@ -949,6 +949,14 @@ OFSwitch13Device::SendQueueCongestionNotifyMessage (uint64_t dpid, uint16_t queu
   return dp_send_message (m_datapath, (struct ofl_msg_header *)&msg, 0);
 }
 
+void
+OFSwitch13Device::GetSketchData(){
+  NS_LOG_FUNCTION (this);
+
+  pipeline_handle_sketch_data(m_datapath->pipeline, 0);
+  return;
+}
+
 int
 OFSwitch13Device::SendQueueCongestionRecoverMessage (uint64_t dpid, uint16_t queueLength, uint32_t port_no)
 {

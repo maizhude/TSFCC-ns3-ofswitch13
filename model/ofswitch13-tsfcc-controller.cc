@@ -106,12 +106,11 @@ void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *el
         Time now = Simulator::Now();
         flow.exist_time = (now - flow.start_time).GetSeconds();
         // NS_LOG_DEBUG ("------" << flow.exist_time);
-        if(flow.exist_time > 0.3){
+        if(flow.exist_time > 0.5){
           auto eleIt = m_elephantFlowTable.find(it->first);
-          if (eleIt == m_elephantFlowTable.end ()){
-            m_elephantFlowTable[it->first] = it->second;
+          if (eleIt != m_elephantFlowTable.end ()){
+            *elephant_num += 1;
           }
-          *elephant_num += 1;
         }
       }
     }
@@ -358,6 +357,38 @@ OFSwitch13TsfccController::HandleQueCr (
       double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_h * 1500)/flow_num;
       mou_rwnd =std::max(int(fair_window/4), int(max_size/4));
       UpdateMouseRWND(mou_rwnd, dpId, port_no, false);
+    }
+  }
+  ofl_msg_free ((struct ofl_msg_header*)msg, 0);
+  return 0;
+}
+
+ofl_err
+OFSwitch13TsfccController::HandleSketchData (
+  struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
+  uint32_t xid)
+{
+  NS_LOG_FUNCTION (this << swtch << xid);
+  Quadruple flow_id;
+  FlowStats flow;
+  for(int i = 0; i < 10; i++){
+    flow_id.ipv4_src = Ipv4Address(ntohl(msg->elephant_flow[i].ip_src));
+    flow_id.ipv4_dst = Ipv4Address(ntohl(msg->elephant_flow[i].ip_dst));
+    flow_id.src_port = msg->elephant_flow[i].tcp_src;
+    flow_id.dst_port = msg->elephant_flow[i].tcp_dst;
+    NS_LOG_WARN("ipv4_src: " << ntohl(msg->elephant_flow[i].ip_src) << " ipv4_dst: " << ntohl(msg->elephant_flow[i].ip_dst)
+                << " src_port: " << (msg->elephant_flow[i].tcp_src) << " dst_port: " << (msg->elephant_flow[i].tcp_dst));
+    auto it = m_globalFlowTable.find(flow_id);
+    if (it != m_globalFlowTable.end ()){
+      flow = it->second;
+      Time now = Simulator::Now();
+      flow.exist_time = (now - flow.start_time).GetSeconds();
+      if(flow.exist_time > 0.5){
+        auto eleIt = m_elephantFlowTable.find(it->first);
+        if (eleIt == m_elephantFlowTable.end ()){
+          m_elephantFlowTable[it->first] = it->second;
+        }
+      }
     }
   }
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
