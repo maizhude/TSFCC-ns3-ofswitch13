@@ -295,7 +295,7 @@ OFSwitch13TsfccController::HandleQueCn (
   if(flow_num != 0){
     //计算公平窗口
     double fair_window = (BDP + queue_length * 1500)/flow_num;
-    // NS_LOG_WARN ("------" << elephant_num << "----------" << flow_num << "--------" << queue_length << "-----------");
+    // NS_LOG_WARN ("------" << elephant_num << "----------" << flow_num << "--------");
 
     //根据队列长度限制发送窗口
     if(elephant_num != 0 && queue_length != 0){
@@ -362,7 +362,14 @@ OFSwitch13TsfccController::HandleQueCr (
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
   return 0;
 }
-
+/**
+ * @brief 处理接收到的Sketch数据，包括10条流量的四元组，根据时间判断是否都是大象流
+ * 
+ * @param msg 接收到的OpenFlow消息
+ * @param swtch 发送消息的交换机
+ * @param xid xid
+ * @return ofl_err 错误结构体
+ */
 ofl_err
 OFSwitch13TsfccController::HandleSketchData (
   struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
@@ -370,23 +377,37 @@ OFSwitch13TsfccController::HandleSketchData (
 {
   NS_LOG_FUNCTION (this << swtch << xid);
   Quadruple flow_id;
+  Quadruple ack_flow;
   FlowStats flow;
   for(int i = 0; i < 10; i++){
-    flow_id.ipv4_src = Ipv4Address(ntohl(msg->elephant_flow[i].ip_src));
-    flow_id.ipv4_dst = Ipv4Address(ntohl(msg->elephant_flow[i].ip_dst));
-    flow_id.src_port = msg->elephant_flow[i].tcp_src;
-    flow_id.dst_port = msg->elephant_flow[i].tcp_dst;
-    NS_LOG_WARN("ipv4_src: " << ntohl(msg->elephant_flow[i].ip_src) << " ipv4_dst: " << ntohl(msg->elephant_flow[i].ip_dst)
-                << " src_port: " << (msg->elephant_flow[i].tcp_src) << " dst_port: " << (msg->elephant_flow[i].tcp_dst));
-    auto it = m_globalFlowTable.find(flow_id);
-    if (it != m_globalFlowTable.end ()){
-      flow = it->second;
-      Time now = Simulator::Now();
-      flow.exist_time = (now - flow.start_time).GetSeconds();
-      if(flow.exist_time > 0.5){
-        auto eleIt = m_elephantFlowTable.find(it->first);
-        if (eleIt == m_elephantFlowTable.end ()){
-          m_elephantFlowTable[it->first] = it->second;
+    if(ntohl(msg->elephant_flow[i].ip_src) != 0){
+      flow_id.ipv4_src = Ipv4Address(ntohl(msg->elephant_flow[i].ip_src));
+      flow_id.ipv4_dst = Ipv4Address(ntohl(msg->elephant_flow[i].ip_dst));
+      flow_id.src_port = msg->elephant_flow[i].tcp_src;
+      flow_id.dst_port = msg->elephant_flow[i].tcp_dst;
+      // NS_LOG_WARN("ipv4_src: " << ntohl(msg->elephant_flow[i].ip_src) << " ipv4_dst: " << ntohl(msg->elephant_flow[i].ip_dst)
+      //             << " src_port: " << (msg->elephant_flow[i].tcp_src) << " dst_port: " << (msg->elephant_flow[i].tcp_dst));
+      auto it = m_globalFlowTable.find(flow_id);
+      if (it != m_globalFlowTable.end ()){
+        flow = it->second;
+        Time now = Simulator::Now();
+        flow.exist_time = (now - flow.start_time).GetSeconds();
+        if(flow.exist_time > 0.5){
+          auto eleIt = m_elephantFlowTable.find(it->first);
+          if (eleIt == m_elephantFlowTable.end ()){
+            m_elephantFlowTable[it->first] = it->second;
+          }
+          ack_flow.ipv4_src = flow_id.ipv4_dst;
+          ack_flow.ipv4_dst = flow_id.ipv4_src;
+          ack_flow.src_port = flow_id.dst_port;
+          ack_flow.dst_port = flow_id.src_port;
+          auto ack_it = m_globalFlowTable.find(ack_flow);
+          if (ack_it != m_globalFlowTable.end ()){
+            auto ack_eleIt = m_elephantFlowTable.find(ack_it->first);
+            if (ack_eleIt == m_elephantFlowTable.end ()){
+              m_elephantFlowTable[ack_it->first] = ack_it->second;
+            }
+          }
         }
       }
     }
