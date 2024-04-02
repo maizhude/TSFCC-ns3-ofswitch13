@@ -75,13 +75,15 @@ public:
   struct ofl_msg_sketch_data *msg, Ptr<const RemoteSwitch> swtch,
   uint32_t xid);
 
-  void ClassifyTraffic(uint16_t *flow_num, uint16_t *elephant_num, uint64_t dpId, uint32_t port_no);
+  void ClassifyTraffic(uint16_t &flow_num, uint16_t &elephant_num, uint64_t dpId, uint32_t port_no);
+
+  void RemoveFlowTable(const FlowStats &flow, const uint64_t out_dpid);
 
   void PredictIncast();
 
-  void SetRwnd(FlowStats flow, uint16_t rwnd);
+  void SetRwnd(const FlowStats &flow, const uint16_t rwnd);
 
-  void SetSYNRwnd(FlowStats flow, uint16_t rwnd);
+  void SetSYNRwnd(const FlowStats &flow, const uint16_t rwnd);
 
   void UpdateMouseRWND(uint16_t mou_rwnd, uint64_t dpId, uint32_t port_no, bool flag);
 
@@ -89,9 +91,10 @@ public:
 
    void UpdateAllRWND(uint16_t rwnd, uint64_t dpId, uint32_t port_no);
 
-  void HandleSYN(Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, uint16_t dst_port, uint32_t inPort, uint32_t outPort, uint64_t dpid);
+  void HandleSYN(const Ipv4Address &ipv4_src, const Ipv4Address &ipv4_dst, const uint16_t src_port, 
+                const uint16_t dst_port, const uint32_t inPort, const uint32_t outPort, const uint64_t dpid);
 
-  void HandleFIN(Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, uint16_t dst_port);
+  void HandleFIN(const Ipv4Address &ipv4_src, const Ipv4Address &ipv4_dst, const uint16_t src_port, const uint16_t dst_port);
   /**
    * Handle flow removed messages sent from switch to this controller. Look for
    * L2 switching information and removes associated entry.

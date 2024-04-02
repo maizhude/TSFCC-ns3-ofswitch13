@@ -62,7 +62,7 @@ OFSwitch13TsfccController::PredictIncast(){
           //降低这个端口出去的所有流量的RWND
           uint16_t flow_num = 0;
           uint16_t elephant_num = 0;
-          ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
+          ClassifyTraffic(flow_num, elephant_num, dpId, port_no);
           if(flow_num != 0 && flow_num >= IncastThreshold){
             double fair_window = (BDP)/flow_num;
             uint16_t rwnd =std::max(int(fair_window/4), int(max_size/4));
@@ -95,21 +95,21 @@ OFSwitch13TsfccController::DoDispose ()
  * @param dpId 交换机ID
  * @param port_no 交换机出端口
  */
-void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *elephant_num, uint64_t dpId, uint32_t port_no){
+void OFSwitch13TsfccController::ClassifyTraffic(uint16_t &flow_num, uint16_t &elephant_num, uint64_t dpId, uint32_t port_no){
   FlowTableMap_t::iterator it;
   for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
     FlowStats flow = it->second;
     std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
     for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
       if(dpId == switch_it->first && switch_it->second.out_port == port_no){
-        *flow_num += 1;
+        flow_num += 1;
         Time now = Simulator::Now();
         flow.exist_time = (now - flow.start_time).GetSeconds();
         // NS_LOG_DEBUG ("------" << flow.exist_time);
         if(flow.exist_time > 0.5){
           auto eleIt = m_elephantFlowTable.find(it->first);
           if (eleIt != m_elephantFlowTable.end ()){
-            *elephant_num += 1;
+            elephant_num += 1;
           }
         }
       }
@@ -117,13 +117,36 @@ void OFSwitch13TsfccController::ClassifyTraffic(uint16_t *flow_num, uint16_t *el
   }
 }
 
+void OFSwitch13TsfccController::RemoveFlowTable(const FlowStats &flow, const uint64_t out_dpid){
+  Quadruple ack_key;
+  ack_key.ipv4_src = flow.ipv4_dst;
+  ack_key.ipv4_dst = flow.ipv4_src;
+  ack_key.src_port = flow.dst_port;
+  ack_key.dst_port = flow.src_port;
+  auto ack_it = m_globalFlowTable.find(ack_key);
+  if (ack_it != m_globalFlowTable.end ()){
+    FlowStats ack_flow = ack_it->second;
+    std::ostringstream remove_set_rwnd;
+    remove_set_rwnd << "flow-mod cmd=del,table=0 eth_type=0x800,"
+            << "ip_proto=6,ip_src=" 
+            << ack_key.ipv4_src
+            << ",ip_dst=" 
+            << ack_key.ipv4_dst
+            << ","
+            << "tcp_src=" 
+            << ack_key.src_port 
+            << ",tcp_dst=" 
+            << ack_key.dst_port;
+    DpctlExecute (out_dpid, remove_set_rwnd.str());
+  }
+}
 /**
  * @brief 找到这条流的第一跳交换机，并下发修改rwnd的流表（普通数据包）
  * 
  * @param flow TCP流（根据这条流找到ACK流）
  * @param rwnd 要修改的rwnd值
  */
-void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
+void OFSwitch13TsfccController::SetRwnd(const FlowStats &flow, const uint16_t rwnd){
   Quadruple ack_key;
   ack_key.ipv4_src = flow.ipv4_dst;
   ack_key.ipv4_dst = flow.ipv4_src;
@@ -157,7 +180,7 @@ void OFSwitch13TsfccController::SetRwnd(FlowStats flow, uint16_t rwnd){
  * @param flow TCP流（根据这条流找到ACK流）
  * @param rwnd 要修改的rwnd值
  */
-void OFSwitch13TsfccController::SetSYNRwnd(FlowStats flow, uint16_t rwnd){
+void OFSwitch13TsfccController::SetSYNRwnd(const FlowStats &flow, const uint16_t rwnd){
   Quadruple ack_key;
   ack_key.ipv4_src = flow.ipv4_dst;
   ack_key.ipv4_dst = flow.ipv4_src;
@@ -290,7 +313,7 @@ OFSwitch13TsfccController::HandleQueCn (
   uint64_t dpId = swtch->GetDpId ();
   
   //分类大象流老鼠流，并记录各自的流数量
-  ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
+  ClassifyTraffic(flow_num, elephant_num, dpId, port_no);
   
   if(flow_num != 0){
     //计算公平窗口
@@ -339,24 +362,18 @@ OFSwitch13TsfccController::HandleQueCr (
   uint64_t dpId = swtch->GetDpId ();
 
   uint32_t port_no = msg->port_no;
-  uint16_t elephant_num = 0;
-  uint16_t mouse_num = 0;
-  
-  uint16_t flow_num = 0;
-  uint16_t ele_rwnd = 0;
-  uint16_t mou_rwnd = 0;
-  //分类大象流老鼠流，并记录各自的流数量
-  ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
-  mouse_num = flow_num - elephant_num;
-  if(flow_num != 0){
-    //计算公平窗口
-    double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_l * 1500)/flow_num;
-    ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
-    UpdateElephantRWND(ele_rwnd, dpId, port_no);
-    if(mouse_num != 0){
-      double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_h * 1500)/flow_num;
-      mou_rwnd =std::max(int(fair_window/4), int(max_size/4));
-      UpdateMouseRWND(mou_rwnd, dpId, port_no, false);
+  FlowTableMap_t::iterator it;
+  //遍历所有流表
+  for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
+    FlowStats flow = it->second;
+    // Quadruple key = it->first;
+    std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
+    //判断一条流所经过的交换机是否有当前拥塞的交换机
+    for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
+      if(dpId == switch_it->first && switch_it->second.out_port == port_no){
+        uint64_t out_dpid = flow.switches.front().first;
+        RemoveFlowTable(flow, out_dpid);
+      }
     }
   }
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
@@ -426,9 +443,8 @@ OFSwitch13TsfccController::HandleSketchData (
  * @param outPort 交换机出端口
  * @param dpid 交换机ID
  */
-void OFSwitch13TsfccController::HandleSYN(
-  Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, 
-  uint16_t dst_port, uint32_t inPort, uint32_t outPort, uint64_t dpid)
+void OFSwitch13TsfccController::HandleSYN(const Ipv4Address &ipv4_src, const Ipv4Address &ipv4_dst, const uint16_t src_port, 
+                const uint16_t dst_port, const uint32_t inPort, const uint32_t outPort, const uint64_t dpid)
 {
   NS_LOG_DEBUG ("TCP FLAG IS: TCP_SYN");
   Quadruple flow_id;
@@ -501,9 +517,8 @@ void OFSwitch13TsfccController::HandleSYN(
  * @param src_port 流的TCP源端口
  * @param dst_port 流的TCP目的端口
  */
-void OFSwitch13TsfccController::HandleFIN(
-  Ipv4Address ipv4_src, Ipv4Address ipv4_dst, uint16_t src_port, 
-  uint16_t dst_port)
+void OFSwitch13TsfccController::HandleFIN(const Ipv4Address &ipv4_src, const Ipv4Address &ipv4_dst, 
+                                          const uint16_t src_port, const uint16_t dst_port)
 {
   //从数据结构中删除流表
   // NS_LOG_DEBUG ("TCP FLAG IS: TCP_FIN");
@@ -514,25 +529,9 @@ void OFSwitch13TsfccController::HandleFIN(
   key.dst_port = dst_port;
   auto it = m_globalFlowTable.find(key);
   if (it != m_globalFlowTable.end ()){
+    //下发删除交换机的修改这条流窗口的流表
     FlowStats flow = it->second;
     uint64_t out_dpid = flow.switches.front().first;
-    for (const auto& entry : flow.switches) {
-        uint64_t dpId = entry.first;
-        uint32_t port_no = entry.second.out_port;
-        uint16_t elephant_num = 0;
-        uint16_t flow_num = 0;
-        uint16_t ele_rwnd = 0;
-        //分类大象流老鼠流，并记录各自的流数量
-        ClassifyTraffic(&flow_num, &elephant_num, dpId, port_no);
-
-        if(flow_num != 0 && elephant_num != 0){
-          //计算公平窗口
-          double fair_window = ((bandwith * rtt/1000000)/8 + queue_threshold_l * 1500)/(flow_num-1);
-          ele_rwnd =std::max(int(fair_window/4), int(max_size/4));
-          UpdateElephantRWND(ele_rwnd, dpId, port_no);
-        }
-      }
-    //下发删除交换机的修改这条流窗口的流表
     Quadruple ack_key;
     ack_key.ipv4_src = ipv4_dst;
     ack_key.ipv4_dst = ipv4_src;
@@ -555,7 +554,7 @@ void OFSwitch13TsfccController::HandleFIN(
       DpctlExecute (out_dpid, remove_set_rwnd.str());
     }
 
-    auto ele_it = m_elephantFlowTable.find(ack_key);
+    auto ele_it = m_elephantFlowTable.find(key);
     if (ele_it != m_elephantFlowTable.end ()){
       m_elephantFlowTable.erase(ele_it);
     }
