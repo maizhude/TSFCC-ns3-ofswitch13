@@ -211,11 +211,11 @@ private:
   NewFlowNumOnSwitchMap_t m_newFlowNumOnSwitchMap;
   //\}
   uint16_t max_size = 1460;
-  double bandwith = 1.0 * 1024 * 1024 * 1024;
-  uint16_t rtt = 800; //RTT为40us
-  uint16_t queue_threshold_h = 80;
-  uint16_t queue_threshold_l = 20;
-  uint32_t IncastThreshold = 20;
+  double bandwith = 10.0 * 1024 * 1024 * 1024;
+  uint16_t rtt = 600; //RTT为40us
+  uint16_t queue_threshold_h = 200;
+  uint16_t queue_threshold_l = 60;
+  uint32_t IncastThreshold = 70;
   double BDP = (bandwith * rtt/1000000)/8;
 
 };

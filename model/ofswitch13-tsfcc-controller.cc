@@ -64,9 +64,9 @@ OFSwitch13TsfccController::PredictIncast(){
           uint16_t elephant_num = 0;
           ClassifyTraffic(flow_num, elephant_num, dpId, port_no);
           if(flow_num != 0 && flow_num >= IncastThreshold){
-            double fair_window = (BDP)/flow_num;
+            double fair_window = (BDP+queue_threshold_l*1500)/flow_num;
             uint16_t rwnd =std::max(int(fair_window/4), int(max_size/4));
-            NS_LOG_WARN("dpId: " << dpId << " rwnd: "  << rwnd);
+            // NS_LOG_WARN("dpId: " << dpId << " rwnd: "  << rwnd);
             UpdateMouseRWND(rwnd*4, dpId, port_no, true);
             UpdateMouseRWND(rwnd, dpId, port_no, false);
             UpdateElephantRWND(int(max_size/4), dpId, port_no);
@@ -106,11 +106,12 @@ void OFSwitch13TsfccController::ClassifyTraffic(uint16_t &flow_num, uint16_t &el
         Time now = Simulator::Now();
         flow.exist_time = (now - flow.start_time).GetSeconds();
         // NS_LOG_DEBUG ("------" << flow.exist_time);
-        if(flow.exist_time > 0.5){
+        if(flow.exist_time > 0.2){
           auto eleIt = m_elephantFlowTable.find(it->first);
-          if (eleIt != m_elephantFlowTable.end ()){
-            elephant_num += 1;
+          if (eleIt == m_elephantFlowTable.end ()){
+            m_elephantFlowTable[it->first] = it->second;
           }
+          elephant_num += 1;
         }
       }
     }
@@ -323,14 +324,15 @@ OFSwitch13TsfccController::HandleQueCn (
     //根据队列长度限制发送窗口
     if(elephant_num != 0 && queue_length != 0){
       if (queue_length < queue_threshold_h){
-        double Alpha = (1-(1-double(queue_threshold_l)/queue_length)*double(flow_num)/elephant_num);
-        ele_rwnd =std::max(int(Alpha*fair_window/4), int(max_size/4));
+        double Alpha = (double)(2*flow_num - elephant_num + (queue_threshold_l * 1500)/2)/(elephant_num * fair_window);
+        ele_rwnd =std::max(int((1-Alpha)*fair_window/4), int(max_size/4));
+        // NS_LOG_WARN ("------" << Alpha << "----------" << ele_rwnd << "--------");
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
       }else{
         ele_rwnd = int(max_size/4);
 
         //老鼠流rwnd设置
-        mou_rwnd = std::max(int((BDP+queue_threshold_l*1500)/flow_num/4),int(max_size/4));
+        mou_rwnd = std::max(int((BDP)/flow_num/4),int(max_size/4));
         //大象流就修改为1MSS
         UpdateElephantRWND(ele_rwnd, dpId, port_no);
         //老鼠流修改为mou_rwnd
@@ -360,22 +362,21 @@ OFSwitch13TsfccController::HandleQueCr (
 
   // Get the switch datapath ID
   uint64_t dpId = swtch->GetDpId ();
-
+  uint16_t flow_num = 0;
   uint32_t port_no = msg->port_no;
   FlowTableMap_t::iterator it;
-  //遍历所有流表
   for (it = m_globalFlowTable.begin(); it != m_globalFlowTable.end(); ++it) {
     FlowStats flow = it->second;
-    // Quadruple key = it->first;
     std::vector<std::pair<uint64_t, SwitchInfo>>::iterator switch_it;
-    //判断一条流所经过的交换机是否有当前拥塞的交换机
     for (switch_it = flow.switches.begin(); switch_it != flow.switches.end(); switch_it++) {
       if(dpId == switch_it->first && switch_it->second.out_port == port_no){
-        uint64_t out_dpid = flow.switches.front().first;
-        RemoveFlowTable(flow, out_dpid);
+        flow_num += 1;
       }
     }
   }
+  uint32_t rwnd = std::min(std::max(int((BDP + queue_threshold_l/2 * 1500)/flow_num/4),int(max_size/4)), int(131072/4));
+  UpdateElephantRWND(rwnd, dpId, port_no);
+
   ofl_msg_free ((struct ofl_msg_header*)msg, 0);
   return 0;
 }
@@ -409,7 +410,7 @@ OFSwitch13TsfccController::HandleSketchData (
         flow = it->second;
         Time now = Simulator::Now();
         flow.exist_time = (now - flow.start_time).GetSeconds();
-        if(flow.exist_time > 0.5){
+        if(flow.exist_time > 0.2){
           auto eleIt = m_elephantFlowTable.find(it->first);
           if (eleIt == m_elephantFlowTable.end ()){
             m_elephantFlowTable[it->first] = it->second;
